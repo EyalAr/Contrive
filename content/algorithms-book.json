@@ -1,0 +1,16 @@
+{
+    "title": "Algorithms Book",
+    "date": {
+        "day": 12,
+        "month": 2,
+        "year": 2013
+    },
+    "categories": ["technical"],
+    "tags": ["algorithms", "academia"],
+    "file": "algorithms-book.markdown",
+    "slug": "algorithms-book",
+    "authors": [{
+        "name": "Eyal Arubas",
+        "email": "eyalarubas@gmail.com"
+    }]
+}

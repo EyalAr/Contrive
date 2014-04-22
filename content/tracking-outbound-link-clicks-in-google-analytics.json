@@ -1,0 +1,16 @@
+{
+    "title": "Tracking outbound link clicks in Google Analytics",
+    "date": {
+        "day": 28,
+        "month": 12,
+        "year": 2013
+    },
+    "categories": ["technical"],
+    "tags": ["google analytics", "tracking", "events", "callback", "javascript"],
+    "file": "tracking-outbound-link-clicks-in-google-analytics.markdown",
+    "slug": "tracking-outbound-link-clicks-in-google-analytics",
+    "authors": [{
+        "name": "Eyal Arubas",
+        "email": "eyalarubas@gmail.com"
+    }]
+}

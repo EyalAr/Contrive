@@ -1,0 +1,16 @@
+{
+    "title": "Count words plug-in for Sublime Text 3",
+    "date": {
+        "day": 12,
+        "month": 1,
+        "year": 2014
+    },
+    "categories": ["technical"],
+    "tags": ["sublime text", "python", "plug-in"],
+    "file": "count-words-in-sublime-text-3.markdown",
+    "slug": "count-words-in-sublime-text-3",
+    "authors": [{
+        "name": "Eyal Arubas",
+        "email": "eyalarubas@gmail.com"
+    }]
+}

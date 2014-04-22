@@ -1,0 +1,19 @@
+{
+  "name": "contrive",
+  "version": "0.0.0",
+  "description": "A static website generator on top of ConcoctJS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Eyal Arubas <eyalarubas@gmail.com>",
+  "license": "ISC",
+  "dependencies": {
+    "concoct-mustache": "0.0.2",
+    "concoct-copy": "0.0.1",
+    "concoct-markdown": "0.0.1",
+    "concoct-named-buffers": "0.0.1",
+    "concoct-content-loader": "0.0.2",
+    "concoct": "0.0.4"
+  }
+}

@@ -1,0 +1,193 @@
+<html>
+<head>
+	<title>Non blocking reading from a subprocess output stream in Python</title>
+	<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+	<h1>Non blocking reading from a subprocess output stream in Python</h1>
+	<div>
+		11/12/2013
+	</div>
+	<div>
+		Eyal Arubas &lt;eyalarubas@gmail.com&gt;
+	</div>
+	<hr>
+	<div>
+		<p>In one of my projects I had to run an interactive shell application as a
+subprocess. I would send commands through the process&#39; <code>stdin</code> pipe and read
+the results through its <code>stdout</code> pipe. As this subprocess is an interactive
+shell, it never terminates. This means that the subprocess&#39; <code>stdout</code> pipe
+stays open, even if no new data is streamed through; which causes various
+problems with Python&#39;s stream reading functions (namely the <code>readline</code>
+function). Specifically, trying to read from such a stream causes the reading
+functions to hang until new data is present.</p>
+<p>When dealing with a subprocess such an interactive shell, it&#39;s natural that
+the stream stays open but no data arrives.</p>
+<p>In my project, I wanted to interact with the subprocess by issuing commands
+through its <code>stdin</code>, reading the result through its <code>stdout</code>, do some other
+things in my script, and repeat this process. But every time I read from the
+subprocess&#39; <code>stdout</code>, my script would hang.</p>
+<p>To demonstrate, we could simulate the problem using the following code:</p>
+<p><code>shell.py</code>:</p>
+<pre><code><span class="hljs-shebang">#!python</span>
+<span class="hljs-keyword">import</span> sys
+<span class="hljs-keyword">while</span> True:
+    s = raw_input(<span class="hljs-string">"Enter command: "</span>)
+    print <span class="hljs-string">"You entered: {}"</span>.format(s)
+    sys.stdout.flush()
+</code></pre><p><code>client.py</code>:</p>
+<pre><code><span class="hljs-comment">#!python</span>
+<span class="hljs-built_in">from</span> subprocess import Popen, PIPE
+<span class="hljs-built_in">from</span> <span class="hljs-built_in">time</span> import sleep
+
+<span class="hljs-comment"># run the shell as a subprocess:</span>
+p = Popen([<span class="hljs-string">'python'</span>, <span class="hljs-string">'shell.py'</span>],
+        <span class="hljs-keyword">stdin</span> = PIPE, <span class="hljs-keyword">stdout</span> = PIPE, <span class="hljs-keyword">stderr</span> = PIPE, <span class="hljs-built_in">shell</span> = False)
+<span class="hljs-comment"># issue command:</span>
+p.<span class="hljs-keyword">stdin</span>.<span class="hljs-built_in">write</span>(<span class="hljs-string">'command\n'</span>)
+<span class="hljs-comment"># let the shell output the result:</span>
+sleep(<span class="hljs-number">0.1</span>)
+<span class="hljs-comment"># get the output</span>
+<span class="hljs-keyword">while</span> True:
+    output = p.<span class="hljs-keyword">stdout</span>.<span class="hljs-built_in">read</span>() <span class="hljs-comment"># &lt;-- Hangs here!</span>
+    <span class="hljs-keyword">if</span> <span class="hljs-operator">not</span> output:
+        print <span class="hljs-string">'[No more data]'</span>
+        break
+    print output
+</code></pre><p><code>shell.py</code> is a dummy shell which receives input and echoes it to <code>stdout</code>.
+It does it in an infinite loop, always waiting for new input, and never ends.</p>
+<p><code>client.py</code> demonstrates how we would usually try to read a subprocess&#39; input.
+In this case the subprocess is our dummy shell. Running this example shows
+that indeed the <code>read</code> function in line 13 hangs, as no new data is received
+from the (still open) <code>p.stdout</code> stream.</p>
+<p>The origin of this problem is in the way these reading mechanisms are
+implemented in Python (See the <a href="http://bugs.python.org/issue1175">discussion on this issue</a> from Python&#39;s
+issue tracker). In Python 2.7.6, the implementation relies on C&#39;s stdio
+library. Specifically, the read function. The following quote from the
+<a href="http://pubs.opengroup.org/onlinepubs/009604499/basedefs/unistd.h.html">library&#39;s documentation</a> makes things clear:</p>
+<blockquote>
+<p>If some process has the pipe open for writing and O_NONBLOCK is clear,
+read() shall block the calling thread until some data is written or the pipe
+is closed by all processes that had the pipe open for writing.</p>
+</blockquote>
+<p>So now we understand that unless the <code>O_NONBLOCK</code> flag is set, then <code>read</code>
+will block until new data arrives.</p>
+<p>And indeed, by taking a look at Python&#39;s source code, we can see that in the
+<code>IO</code> module implementation the <code>O_NONBLOCK flag</code> is never set (see the
+<a href="http://hg.python.org/cpython/file/3a1db0d2747e/Modules/_io/fileio.c#l176">fileio_init function</a>, and follow setting of flags in the flag variable
+throughout the function).</p>
+<p>So how do we solve this?</p>
+<p>If we were programming in C, we would simply set the <code>O_NONBLOCK</code> flag of our
+file descriptor using the <a href="http://pubs.opengroup.org/onlinepubs/009696799/basedefs/fcntl.h.html">fcntl.h</a> library. Indeed, Python provides us
+with an interface to this library&#39;s mechanisms through the <a href="http://docs.python.org/2/library/fcntl.html">fcntl module</a>.
+So one solution would be to manually set the <code>O_NONBLOCK</code> flag of our file
+descriptor and then use the os&#39;s file reading mechanisms through the
+<a href="http://docs.python.org/2/library/os.html#file-descriptor-operations">os module</a>.</p>
+<p>Such a solution will look something like this:</p>
+<p><code>client_O_NONBLOCK.py</code>:</p>
+<pre><code><span class="hljs-comment">#!python</span>
+<span class="hljs-built_in">from</span> subprocess import Popen, PIPE
+<span class="hljs-built_in">from</span> <span class="hljs-built_in">time</span> import sleep
+<span class="hljs-built_in">from</span> fcntl import fcntl, F_GETFL, F_SETFL
+<span class="hljs-built_in">from</span> os import O_NONBLOCK, <span class="hljs-built_in">read</span>
+
+<span class="hljs-comment"># run the shell as a subprocess:</span>
+p = Popen([<span class="hljs-string">'python'</span>, <span class="hljs-string">'shell.py'</span>],
+        <span class="hljs-keyword">stdin</span> = PIPE, <span class="hljs-keyword">stdout</span> = PIPE, <span class="hljs-keyword">stderr</span> = PIPE, <span class="hljs-built_in">shell</span> = False)
+<span class="hljs-comment"># set the O_NONBLOCK flag of p.stdout file descriptor:</span>
+flags = fcntl(p.<span class="hljs-keyword">stdout</span>, F_GETFL) <span class="hljs-comment"># get current p.stdout flags</span>
+fcntl(p.<span class="hljs-keyword">stdout</span>, F_SETFL, flags | O_NONBLOCK)
+<span class="hljs-comment"># issue command:</span>
+p.<span class="hljs-keyword">stdin</span>.<span class="hljs-built_in">write</span>(<span class="hljs-string">'command\n'</span>)
+<span class="hljs-comment"># let the shell output the result:</span>
+sleep(<span class="hljs-number">0.1</span>)
+<span class="hljs-comment"># get the output</span>
+<span class="hljs-keyword">while</span> True:
+    <span class="hljs-keyword">try</span>:
+        print <span class="hljs-built_in">read</span>(p.<span class="hljs-keyword">stdout</span>.fileno(), <span class="hljs-number">1024</span>),
+    except OSError:
+        <span class="hljs-comment"># the os throws an exception if there is no data</span>
+        print <span class="hljs-string">'[No more data]'</span>
+        break
+</code></pre><p>And it works!</p>
+<p>But, changing flags of file descriptors isn&#39;t everyones cup of tea.<br>Instead, we can employ another nice solution which uses threads. Instead of
+changing the behaviour of the reading functions, we let them block and wait
+for new data as much as they want. But they do it on another thread. On that
+thread, the reading functions will read data once it becomes available in the
+stream, and block the rest of the time. But in order to reach the read data
+from the main thread, we need some kind of proxy. We could, for example, use
+a list, a queue, a file on disk, etc. An elegant solution which uses a queue
+is presented <a href="http://stackoverflow.com/a/4896288/1365324">here</a>. I present here a slightly modified version.</p>
+<p>First, we wrap the stream we want to read from with a class. This class opens
+a separate thread which reads from the stream whenever data becomes available
+and stores the data in a queue (A queue in Python is threads-safe). This class
+also exposes a <code>readline</code> function, which pulls from the queue the data.</p>
+<p><code>nbstreamreader.py</code>:</p>
+<pre><code><span class="hljs-comment">#!python</span>
+<span class="hljs-keyword">from</span> threading <span class="hljs-keyword">import</span> Thread
+<span class="hljs-keyword">from</span> Queue <span class="hljs-keyword">import</span> Queue, Empty
+
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">NonBlockingStreamReader</span>:</span>
+
+    <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">__init__</span><span class="hljs-params">(self, stream)</span>:</span>
+        <span class="hljs-string">'''
+        stream: the stream to read from.
+                Usually a process' stdout or stderr.
+        '''</span>
+
+        self._s = stream
+        self._q = Queue()
+
+        <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">_populateQueue</span><span class="hljs-params">(stream, queue)</span>:</span>
+            <span class="hljs-string">'''
+            Collect lines from 'stream' and put them in 'quque'.
+            '''</span>
+
+            <span class="hljs-keyword">while</span> <span class="hljs-keyword">True</span>:
+                line = stream.readline()
+                <span class="hljs-keyword">if</span> line:
+                    queue.put(line)
+                <span class="hljs-keyword">else</span>:
+                    <span class="hljs-keyword">raise</span> UnexpectedEndOfStream
+
+        self._t = Thread(target = _populateQueue,
+                args = (self._s, self._q))
+        self._t.daemon = <span class="hljs-keyword">True</span>
+        self._t.start() <span class="hljs-comment">#start collecting lines from the stream</span>
+
+    <span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">readline</span><span class="hljs-params">(self, timeout = None)</span>:</span>
+        <span class="hljs-keyword">try</span>:
+            <span class="hljs-keyword">return</span> self._q.get(block = timeout <span class="hljs-keyword">is</span> <span class="hljs-keyword">not</span> <span class="hljs-keyword">None</span>,
+                    timeout = timeout)
+        <span class="hljs-keyword">except</span> Empty:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">None</span>
+
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UnexpectedEndOfStream</span><span class="hljs-params">(Exception)</span>:</span> <span class="hljs-keyword">pass</span>
+</code></pre><p>Now our original attempt for the client remains almost the same, and much more
+intuitive than using the <code>fcntl</code> module.</p>
+<p><code>client_thread.py</code>:</p>
+<pre><code><span class="hljs-comment">#!python</span>
+<span class="hljs-keyword">from</span> subprocess <span class="hljs-keyword">import</span> Popen, PIPE
+<span class="hljs-keyword">from</span> time <span class="hljs-keyword">import</span> sleep
+<span class="hljs-keyword">from</span> nbstreamreader <span class="hljs-keyword">import</span> NonBlockingStreamReader <span class="hljs-keyword">as</span> NBSR
+
+<span class="hljs-comment"># run the shell as a subprocess:</span>
+p = Popen([<span class="hljs-string">'python'</span>, <span class="hljs-string">'shell.py'</span>],
+        stdin = PIPE, stdout = PIPE, stderr = PIPE, shell = <span class="hljs-keyword">False</span>)
+<span class="hljs-comment"># wrap p.stdout with a NonBlockingStreamReader object:</span>
+nbsr = NBSR(p.stdout)
+<span class="hljs-comment"># issue command:</span>
+p.stdin.write(<span class="hljs-string">'command\n'</span>)
+<span class="hljs-comment"># get the output</span>
+<span class="hljs-keyword">while</span> <span class="hljs-keyword">True</span>:
+    output = nbsr.readline(<span class="hljs-number">0.1</span>)
+    <span class="hljs-comment"># 0.1 secs to let the shell output the result</span>
+    <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> output:
+        <span class="hljs-keyword">print</span> <span class="hljs-string">'[No more data]'</span>
+        <span class="hljs-keyword">break</span>
+    <span class="hljs-keyword">print</span> output
+</code></pre><p><strong>Note</strong>: All code from this post can be obtained in <a href="https://gist.github.com/EyalAr/7915597">this gist</a>.</p>
+
+	</div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+    "title": "Testing websites on Internet Explorer under Linux",
+    "date": {
+        "day": 5,
+        "month": 1,
+        "year": 2014
+    },
+    "categories": ["technical"],
+    "tags": ["internet explorer", "linux", "virtual" "machine", "virtualization"],
+    "file": "internet-explorer-on-linux.markdown",
+    "slug": "internet-explorer-on-linux",
+    "authors": [{
+        "name": "Eyal Arubas",
+        "email": "eyalarubas@gmail.com"
+    }]
+}

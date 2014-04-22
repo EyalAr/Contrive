@@ -1,0 +1,153 @@
+<html>
+<head>
+	<title>Tracking outbound link clicks in Google Analytics</title>
+	<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+	<h1>Tracking outbound link clicks in Google Analytics</h1>
+	<div>
+		28/12/2013
+	</div>
+	<div>
+		Eyal Arubas &lt;eyalarubas@gmail.com&gt;
+	</div>
+	<hr>
+	<div>
+		<p>In this post I will show the method I use to track outbound &#39;click&#39; events
+(clicks which take the user away from the current page) with Google Analytics.
+I will be using the new <a href="https://developers.google.com/analytics/devguides/collection/analyticsjs/">Analytics.js</a> and <a href="http://jquery.com/">jQuery</a> in the code samples.</p>
+<p>Events tracking is a useful part of Google Analytics which allows to track
+and gather statistics about various types of user interaction with the page.
+One of these interactions is clicking on links in the page. We want to know
+where the user is going from our page. Each time we want to inform GA about
+events in our page, we need to send the relevant data to the servers. For this,
+GA provides us with the <a href="https://developers.google.com/analytics/devguides/collection/analyticsjs/advanced#send">send</a> method.</p>
+<p>A naive way to do it would be to bind the Javascript <code>onclick</code> event with a
+function (an <a href="http://www.w3.org/TR/DOM-Level-2-Events/events.html#Events-EventListener">event listener</a>) that sends the event&#39;s data to GA:</p>
+<pre><code>#!javascript
+<span class="hljs-comment">// register an event listener to the 'click' event:</span>
+$(<span class="hljs-string">"..."</span>).on(<span class="hljs-string">'click'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(e)</span>{</span>
+    ga(<span class="hljs-string">'send'</span>, {
+        <span class="hljs-string">'hitType'</span>: <span class="hljs-string">'event'</span>,
+        <span class="hljs-string">'eventCategory'</span>: <span class="hljs-string">'...'</span>,
+        <span class="hljs-string">'eventAction'</span>: <span class="hljs-string">'...'</span>,
+        <span class="hljs-string">'eventLabel'</span>: <span class="hljs-string">'...'</span>,
+        }
+    });
+});
+</code></pre><p>This method will not always work, as we cannot guarantee that the <code>send</code> data
+will be received by GA before the browser unloads our page and loads the new
+link.</p>
+<p>So any solution we propose must ensure that the data will be sent <strong>before</strong>
+the user is redirected to the new page.</p>
+<p><em>W3C</em> specifies that an event&#39;s default action <a href="http://www.w3.org/TR/DOM-Level-2-Events/events.html#Events-flow-cancelation">may be cancelled</a> by another
+registered event listener. It also specified that before the event&#39;s default
+action is processed, all other registered event listeners must be triggered.</p>
+<blockquote>
+<p>These listeners then have the option of canceling the implementation&#39;s
+default action...</p>
+</blockquote>
+<p>We can use this fact to prevent the browser from loading the new link before
+sending the data to GA. The default action for a link click event is, of course,
+loading the link&#39;s page. If we prevent the browser from loading the link&#39;s page
+when the link is clicked (by using the event object&#39;s <a href="http://www.w3.org/TR/DOM-Level-3-Events/#widl-Event-preventDefault">preventDefault</a>
+method), we can send the data to GA without interruptions; and then manually
+redirect to the clicked link.</p>
+<p>Many of the solutions I have seen online suggest to use Javascript&#39;s
+<code>setTimeout</code> function in order to delay the loading of the new page, thus
+providing enough time for GA to receive the data. It is usually implemented in
+the following manner:</p>
+<pre><code>#!javascript
+$(<span class="hljs-string">"..."</span>).on(<span class="hljs-string">'click'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(e)</span>{</span>
+    <span class="hljs-comment">// prevent browser from loading the new page:</span>
+    e.preventDefault();
+
+    <span class="hljs-comment">// send data to GA:</span>
+    ga(<span class="hljs-string">'send'</span>, {
+        <span class="hljs-string">'hitType'</span>: <span class="hljs-string">'event'</span>,
+        <span class="hljs-string">'eventCategory'</span>: <span class="hljs-string">'...'</span>,
+        <span class="hljs-string">'eventAction'</span>: <span class="hljs-string">'...'</span>,
+        <span class="hljs-string">'eventLabel'</span>: <span class="hljs-string">'...'</span>,
+        }
+    });
+
+    <span class="hljs-comment">// manually load the new page after a timeout:</span>
+    setTimeout(<span class="hljs-string">'window.location = new_page_url'</span>, <span class="hljs-number">100</span>);
+});
+</code></pre><p>In this example I use a delay of 100ms, which is what most solutions on the web
+use as well. This should usually provide enough time for the data to reach GA&#39;s
+servers before loading the new page. We also need to take into account that this
+delay affects the responsiveness of our page. We don&#39;t want this number to be
+too big, because then the delay will be noticeable to the user.</p>
+<p>I see two problems with this solution. The first is that any delay we choose
+(whether it&#39;s 100 or any other number) might not be enough for the data to reach
+GA; but we can&#39;t use a default big number, because this will impair the
+responsiveness of the page. The second is that the number we choose might be
+too big. Maybe in most times the data will reach GA much sooner than the delay
+we use, thus causing the user an unnecessary delay.</p>
+<p>This solution was valid for the older versions of GA, in which it was not
+possible to use callback functions with the <code>send</code> command.  But with newer
+versions of GA, we can take advantage of Javascript&#39;s asynchronous nature,
+namely callback functions. GA allows us to <a href="https://developers.google.com/analytics/devguides/collection/analyticsjs/advanced#hitCallback">register a callback function</a> to
+the <code>send</code> command. The <a href="https://developers.google.com/analytics/devguides/collection/analyticsjs/advanced#hitCallback">official documentation</a> even mentions this can be
+used to track outbound clicks:</p>
+<blockquote>
+<p>That way you can send a user to their destination only after their click has
+been reported to Google Analytics.</p>
+</blockquote>
+<p>This effectively means the user is delayed only for the exact required amount
+of time for the data to reach GA&#39;s server; before redirecting to the new page.</p>
+<p>Such a solution will employ the <code>hitCallback</code> property as follows:</p>
+<pre><code>#!javascript
+$(<span class="hljs-string">"..."</span>).on(<span class="hljs-string">'click'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(e)</span>{</span>
+    <span class="hljs-comment">// prevent browser from loading the new page:</span>
+    e.preventDefault();
+
+    <span class="hljs-comment">// send data to GA:</span>
+    ga(<span class="hljs-string">'send'</span>, {
+            <span class="hljs-string">'hitType'</span>: <span class="hljs-string">'event'</span>,
+            <span class="hljs-string">'eventCategory'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'eventAction'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'eventLabel'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'hitCallback'</span>: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">()</span>{</span>
+                <span class="hljs-comment">// redirect:</span>
+                window.location = <span class="hljs-string">'new_page_url'</span>;
+            }
+        }
+    });
+});
+</code></pre><p>Usually GA&#39;s servers are fast enough for the callback to fire almost immediately
+and the delay to be unnoticeable. But on some cases (slow connections,
+firewalls, etc.) GA&#39;s servers are unreachable or very slow, thus making the
+callback never fire and the redirection to never occur. For these cases we can
+use <code>setTimeout</code> as a safety net. If the callback is not fired within a
+reasonable amount of time, we redirect anyway:</p>
+<pre><code>#!javascript
+$(<span class="hljs-string">"..."</span>).on(<span class="hljs-string">'click'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(e)</span>{</span>
+    <span class="hljs-comment">// prevent browser from loading the new page:</span>
+    e.preventDefault();
+
+    <span class="hljs-comment">// register safety net timeout:</span>
+    <span class="hljs-keyword">var</span> t = setTimeout(<span class="hljs-string">'window.location = new_page_url'</span>, <span class="hljs-number">250</span>);
+
+    <span class="hljs-comment">// send data to GA:</span>
+    ga(<span class="hljs-string">'send'</span>, {
+            <span class="hljs-string">'hitType'</span>: <span class="hljs-string">'event'</span>,
+            <span class="hljs-string">'eventCategory'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'eventAction'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'eventLabel'</span>: <span class="hljs-string">'...'</span>,
+            <span class="hljs-string">'hitCallback'</span>: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">()</span>{</span>
+                clearTimeout(t);
+                <span class="hljs-comment">// redirect:</span>
+                window.location = <span class="hljs-string">'new_page_url'</span>;
+            }
+        }
+    });
+});
+</code></pre><p>If the timeout is never cleared by the callback, it means it hasn&#39;t been fired,
+so after 250ms we redirect anyway; not sending the data to GA, but at least
+redirecting the user to the new page.</p>
+
+	</div>
+</body>
+</html>
