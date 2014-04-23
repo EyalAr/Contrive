@@ -29,13 +29,17 @@ async.waterfall([
                     join(concoction.theme, "./templates/post.tpl"),
                     join(concoction.theme, "./templates/index.tpl"),
                 ],
-                contexts: join(concoction.metadata, "./*.json"),
+                contexts: [
+                    join(concoction.metadata, "./*.json"),
+                    concoction.globals
+                ],
                 dest: concoction.build,
                 linkingRules: {},
                 plugins: []
             };
 
             options['linkingRules'][join(concoction.metadata, "./*.json")] = join(concoction.theme, "./templates/post.tpl");
+            options['linkingRules'][concoction.globals] = join(concoction.theme, "./templates/index.tpl");
 
             next(null, concoction, options);
 
@@ -43,6 +47,19 @@ async.waterfall([
 
         // step 3: inject internal plugins
         function(concoction, options, next) {
+
+            options.plugins.push({
+                name: 'global-context-generator',
+                handler: require('./lib/globalContext'),
+                params: {
+                    globalsPath: concoction.globals
+                }
+            });
+
+            options.plugins.push({
+                name: 'sort-by-date',
+                handler: require('./lib/sortByDate')
+            });
 
             options.plugins.push({
                 name: 'date-formatter',
@@ -75,7 +92,8 @@ async.waterfall([
                 handler: require('concoct-content-loader'),
                 params: {
                     srcField: 'file',
-                    contentField: '_content'
+                    contentField: '_content',
+                    strict: false
                 }
             });
 

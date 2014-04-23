@@ -11,9 +11,9 @@
   "dependencies": {
     "concoct-mustache": "0.0.2",
     "concoct-copy": "0.0.1",
-    "concoct-markdown": "0.0.1",
+    "concoct-markdown": "0.0.2",
     "concoct-named-buffers": "0.0.1",
-    "concoct-content-loader": "0.0.2",
+    "concoct-content-loader": "0.0.3",
     "concoct": "0.0.4",
     "async": "^0.7.0",
     "moment": "^2.6.0"
