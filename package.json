@@ -14,6 +14,7 @@
     "concoct-markdown": "0.0.1",
     "concoct-named-buffers": "0.0.1",
     "concoct-content-loader": "0.0.2",
-    "concoct": "0.0.4"
+    "concoct": "0.0.4",
+    "async": "^0.7.0"
   }
 }

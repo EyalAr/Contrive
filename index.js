@@ -1,7 +1,7 @@
 var fs = require('fs'),
     async = require('async');
 
-async.series([
+async.waterfall([
 
     // step 1: read concoction.json
     function(next) {
@@ -31,15 +31,13 @@ async.series([
             ],
             contexts: join(concoction.metadata, "./*.json"),
             dest: concoction.build,
-            linkingRules: {
-                join(concoction.metadata, "./*.json"): join(concoction.theme, "./templates/post.tpl")
-            },
+            linkingRules: {},
             plugins: [{
                 name: 'concoct-copy',
                 handler: require('concoct-copy'),
                 params: {
                     src: join(concoction.theme, "./static"),
-                    dest: './build'
+                    dest: concoction.build
                 }
             }, {
                 name: 'concoct-content-loader',
@@ -68,22 +66,27 @@ async.series([
             }]
         };
 
+        options['linkingRules'][join(concoction.metadata, "./*.json")] = join(concoction.theme, "./templates/post.tpl");
+
         next(null, options);
+
+    },
+
+    // step 3: start ConcoctJS:
+    function(options, next) {
+
+        var Concoct = require('concoct');
+        var c = new Concoct(options);
+        c.concoct(next);
 
     }
 
 ], function(err) {
+
     if (err) {
         console.error(err);
     } else {
         console.log('Done.')
     }
-});
 
-var Concoction = require('concoct');
-var c = new Concoction(options);
-
-c.concoct(function(err) {
-    if (err) console.log(err);
-    console.log('done');
 });
